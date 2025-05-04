@@ -1,0 +1,7 @@
+# .gitignore
+node_modules/
+dist/
+nodemon.json
+jest.config.js
+vscode/
+example

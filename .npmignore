@@ -1,0 +1,8 @@
+# .npmignore
+src/
+tsconfig.json
+.*
+*.log
+*.md
+node_modules/
+!dist/

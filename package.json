@@ -1,0 +1,39 @@
+{
+  "name": "rpg-core",
+  "version": "1.0.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "commonjs",
+  "files": [
+    "dist"
+  ],
+  "license": "MIT",
+  "scripts": {
+    "clean": "rimraf dist",
+    "dev": "nodemon",
+    "build": "npm run clean && tsc && npm run postbuild",
+    "postbuild": "rimraf dist/tsconfig.json",
+    "pack": "npm run build && shx mkdir -p build && npm pack --pack-destination=build/",
+    "test": "jest --watchAll",
+    "lint": "eslint . --ext .ts,.tsx",
+    "watch": "tsc --watch"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.14",
+    "@types/node": "^22.15.3",
+    "@typescript-eslint/eslint-plugin": "^8.31.1",
+    "@typescript-eslint/parser": "^8.31.1",
+    "concurrently": "^9.1.2",
+    "eslint": "^9.25.1",
+    "fs": "^0.0.1-security",
+    "jest": "^29.7.0",
+    "nodemon": "^3.1.10",
+    "path": "^0.12.7",
+    "rimraf": "^6.0.1",
+    "shx": "^0.4.0",
+    "ts-jest": "^29.3.2",
+    "ts-node": "^10.9.2",
+    "tsconfig-paths": "^4.2.0",
+    "typescript": "^5.8.3"
+  }
+}
