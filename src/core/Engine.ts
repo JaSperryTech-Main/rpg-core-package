@@ -1,39 +1,53 @@
 // rpg-core/src/core/Engine.ts
 
-import { EventEmitter } from "node:events";
-import { Config, ConfigManager } from "../config";
 import {
-  GameModule,
-  ModuleState,
-  IEventEmitter,
-  ModuleRegistry,
-} from "./types";
+  ConfigManager,
+  DefaultConfig,
+  type Config,
+} from "@modules/ConfigModule";
+import { GameModule, ModuleState, ModuleRegistry } from "./types";
 import * as fs from "fs";
 import * as path from "path";
 import { logger } from "@utils/logger";
+import { EventManager } from "./EventManager";
 
-export class Engine implements IEventEmitter {
-  readonly config: Readonly<Config>;
-  readonly events = new EventEmitter();
+export class Engine {
+  private configManager: ConfigManager;
+  public eventManager = new EventManager();
   private modules: Map<string, GameModule> = new Map();
   private dependencyGraph: Map<string, string[]> = new Map();
   private initialized = false;
 
+  public get config(): Readonly<Config> {
+    return this.configManager.config;
+  }
+
   constructor(userConfig?: Partial<Config>) {
     logger.debug("Initializing engine with config:", userConfig);
-    this.config = ConfigManager.override(userConfig ?? {});
-    ConfigManager.validate();
+
+    // Initialize ConfigManager with defaults and user config
+    this.configManager = new ConfigManager(DefaultConfig);
+    if (userConfig) {
+      this.configManager.update(userConfig);
+    }
+
+    // Validate configuration
+    if (!this.configManager.validate()) {
+      logger.error("Invalid configuration detected - resetting to defaults");
+      this.configManager.reset();
+    }
+
     logger.setEngine(this);
   }
 
-  on(event: string, listener: (...args: any[]) => void) {
-    this.events.on(event, listener);
+  // Add configuration access methods
+  public getConfigValue<K extends keyof Config>(path: K): Config[K] {
+    return this.configManager.get(path);
   }
-  off(event: string, listener: (...args: any[]) => void) {
-    this.events.off(event, listener);
-  }
-  emit(event: string, ...args: any[]) {
-    this.events.emit(event, ...args);
+
+  public updateConfig(partialConfig: Partial<Config>) {
+    this.configManager.update(partialConfig);
+    logger.debug("Configuration updated", this.config);
   }
 
   private async autoRegisterModules() {
@@ -96,7 +110,7 @@ export class Engine implements IEventEmitter {
         module.init(this);
         module.state = ModuleState.INITIALIZED;
         logger.info(`Module initialized: ${moduleName}`);
-        this.emit("module:initialized", module.name);
+        this.eventManager.emit("module:initialized", module.name);
       } catch (error) {
         if (error instanceof Error) {
           logger.error(`Module init failed: ${module.name}`, error);

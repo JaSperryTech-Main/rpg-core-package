@@ -1,7 +1,7 @@
 import { Entity } from "./Entity";
 import { TStats } from "./types";
 import { TAttributes } from "@modules/AttributeModule";
-import { defaultConfig } from "../../config";
+import { DefaultConfig } from "@modules/ConfigModule";
 import { Inventory } from "@src/modules/InventoryModule";
 
 export class Player extends Entity {
@@ -9,16 +9,16 @@ export class Player extends Entity {
     id: string,
     name: string,
     stats: TStats = {
-      health: defaultConfig.stats.defaultHealth,
-      maxHealth: defaultConfig.stats.defaultHealth,
-      mana: defaultConfig.stats.defaultMana,
-      maxMana: defaultConfig.stats.defaultMana,
+      health: DefaultConfig.stats.defaultHealth,
+      maxHealth: DefaultConfig.stats.defaultHealth,
+      mana: DefaultConfig.stats.defaultMana,
+      maxMana: DefaultConfig.stats.defaultMana,
     },
     attributes: TAttributes = {
-      strength: defaultConfig.stats.defaultStrength,
-      dexterity: defaultConfig.stats.defaultDexterity,
-      intelligence: defaultConfig.stats.defaultIntelligence,
-      vitality: defaultConfig.stats.defaultVitality,
+      strength: DefaultConfig.stats.defaultStrength,
+      dexterity: DefaultConfig.stats.defaultDexterity,
+      intelligence: DefaultConfig.stats.defaultIntelligence,
+      vitality: DefaultConfig.stats.defaultVitality,
     },
     public inventory = new Inventory()
   ) {

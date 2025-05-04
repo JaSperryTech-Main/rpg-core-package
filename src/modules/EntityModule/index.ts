@@ -14,7 +14,7 @@ declare module "../../core/types" {
 export default class EntityModule implements GameModule {
   name: string = "EntityModule";
   enabled: boolean = true;
-  dependencies = ["AttributeModule", "InventoryModule"];
+  dependencies = ["AttributeModule", "InventoryModule", "ConfigModule"];
 
   public entityManager: EntityManager = new EntityManager();
 

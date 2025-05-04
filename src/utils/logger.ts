@@ -102,7 +102,7 @@ export class RPGLogger {
     console.log(formatted); // Remove the separate meta logging
 
     // Engine event emission remains
-    this.engine?.emit("log", {
+    this.engine?.eventManager.emit("log", {
       level:
         level === "info" && message.includes("success") ? "success" : level,
       message,

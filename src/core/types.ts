@@ -7,10 +7,16 @@ export enum ModuleState {
   DISPOSED,
 }
 
+export interface GameEvent<T = any> {
+  type: string;
+  data?: T;
+  timestamp: number;
+}
+
 export interface IEventEmitter {
-  on(event: string, listener: Function): void;
-  off(event: string, listener: Function): void;
-  emit(event: string, ...args: any[]): void;
+  on<T = any>(event: string, listener: (event: GameEvent<T>) => void): void;
+  off<T = any>(event: string, listener: (event: GameEvent<T>) => void): void;
+  emit<T = any>(event: string, data?: T): void;
 }
 
 export interface GameModule<TConfig = any> {
