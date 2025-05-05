@@ -85,6 +85,9 @@ export class ConfigManager {
     if (typeof target !== "object" || typeof source !== "object") return source;
 
     for (const key of Object.keys(source)) {
+      if (key === "__proto__" || key === "constructor") {
+        continue; // Skip prototype-polluting keys
+      }
       if (source[key] instanceof Object && key in target) {
         target[key] = this.deepMerge(target[key], source[key]);
       } else {
