@@ -15,10 +15,13 @@ export default class ItemModule implements GameModule {
   enabled: boolean = true;
   dependencies = ["AttributeModule", "SocketModule"];
 
+  private engine!: Engine;
+
   public itemManager: ItemManager = new ItemManager();
 
   init(engine: Engine): void {
-    console.log(`[${this.name}] initialized.`);
+    this.engine = engine;
+    engine.eventManager.emit("module:init", { name: this.name });
   }
 }
 

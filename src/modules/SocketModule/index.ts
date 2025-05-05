@@ -15,15 +15,11 @@ export default class SocketModule implements GameModule {
   enabled: boolean = true;
   dependencies = ["AttributeModule"];
 
-  public test() {
-    console.log("Test");
-  }
-
   private engine!: Engine;
 
   init(engine: Engine): void {
     this.engine = engine;
-    console.log(`[${this.name}] initialized.`);
+    engine.eventManager.emit("module:init", { name: this.name });
   }
 }
 

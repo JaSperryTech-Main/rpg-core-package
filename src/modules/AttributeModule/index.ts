@@ -19,7 +19,7 @@ export default class AttributeModule implements GameModule {
 
   init(engine: Engine): void {
     this.engine = engine;
-    console.log(`[${this.name}] initialized.`);
+    engine.eventManager.emit("module:init", { name: this.name });
   }
 }
 

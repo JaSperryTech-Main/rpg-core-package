@@ -18,7 +18,8 @@ export default class InventoryModule implements GameModule {
   private engine!: Engine;
 
   init(engine: Engine): void {
-    console.log(`[${this.name}] initialized.`);
+    this.engine = engine;
+    engine.eventManager.emit("module:init", { name: this.name });
   }
 }
 

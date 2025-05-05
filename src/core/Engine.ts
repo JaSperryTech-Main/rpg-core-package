@@ -15,6 +15,7 @@ export class Engine {
   private modules: Map<string, GameModule> = new Map();
   private dependencyGraph: Map<string, string[]> = new Map();
   private initialized = false;
+  public logger = logger;
 
   public get config(): Readonly<Config> {
     return this.configManager.config;
@@ -123,6 +124,18 @@ export class Engine {
     }
   }
 
+  private initializeEvents() {
+    const eventManager = this.eventManager;
+
+    eventManager.on("module:init", (module) => {
+      if (logger.level == "debug") {
+        logger.info(`[module:init] ${module.data.name} initialized.`, module);
+      } else {
+        logger.info(`[module:init] ${module.data.name} initialized.`);
+      }
+    });
+  }
+
   private topologicalSort(): string[] {
     logger.debug("Performing topological sort on modules");
     const sorted: string[] = [];
@@ -157,6 +170,7 @@ export class Engine {
 
     logger.info("Engine initialization started");
     await this.autoRegisterModules();
+    this.initializeEvents();
     this.initializeModules();
     this.initialized = true;
     logger.info("Engine initialization completed successfully");

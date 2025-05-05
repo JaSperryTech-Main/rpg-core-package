@@ -30,7 +30,7 @@ const LOG_SYMBOLS = {
 };
 
 export class RPGLogger {
-  private level: LogLevel;
+  public level: LogLevel;
   private colors: boolean;
   private align: boolean;
   private showMetadata: boolean;
@@ -47,6 +47,10 @@ export class RPGLogger {
 
   setEngine(engine: Engine) {
     this.engine = engine;
+  }
+
+  setLevel(level: LogLevel) {
+    this.level = level;
   }
 
   private shouldLog(level: LogLevel): boolean {
@@ -128,18 +132,36 @@ export class RPGLogger {
   }
 
   success(message: string, meta?: any) {
-    const originalColors = { ...LOG_COLORS };
-    const tempSymbols = { ...LOG_SYMBOLS };
+    const successColor = LOG_COLORS.success;
+    const successSymbol = LOG_SYMBOLS.success;
 
-    // Temporarily override for success message
-    LOG_COLORS.info = LOG_COLORS.success;
-    LOG_SYMBOLS.info = LOG_SYMBOLS.success;
+    const originalFormatHeader = this.formatHeader;
+    this.formatHeader = (level: LogLevel) => {
+      if (level === "info") {
+        const symbol = successSymbol;
+        const color = successColor;
+        const reset = LOG_COLORS.reset;
+
+        const timestamp = this.colors
+          ? `${LOG_COLORS.timestamp}${new Date().toLocaleTimeString()}${reset}`
+          : new Date().toLocaleTimeString();
+
+        const headerParts = [
+          `${symbol} ${timestamp}`,
+          `${level.toUpperCase()}:`.padEnd(7),
+        ];
+
+        if (this.colors) {
+          headerParts[1] = `${color}${headerParts[1]}${reset}`;
+        }
+
+        return headerParts.join(" ");
+      }
+      return originalFormatHeader.call(this, level);
+    };
 
     this.log("info", message, meta);
-
-    // Restore original values
-    LOG_COLORS.info = originalColors.info;
-    LOG_SYMBOLS.info = tempSymbols.info;
+    this.formatHeader = originalFormatHeader;
   }
 
   static create(options?: LoggerOptions): RPGLogger {
@@ -148,7 +170,7 @@ export class RPGLogger {
 }
 
 export const logger = RPGLogger.create({
-  level: process.env.NODE_ENV === "production" ? "info" : "debug",
+  level: process.env.NODE_ENV === "production" ? "warn" : "info",
   colors: true,
   align: true,
   showMetadata: process.env.NODE_ENV !== "production",
