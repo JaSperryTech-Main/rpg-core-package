@@ -5,6 +5,7 @@ export enum ModuleState {
   REGISTERED,
   INITIALIZED,
   DISPOSED,
+  ERROR,
 }
 
 export interface GameEvent<T = any> {
