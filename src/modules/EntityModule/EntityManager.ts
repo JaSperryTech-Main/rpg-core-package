@@ -9,7 +9,6 @@ export class EntityManager<T extends Entity = Entity> {
 
   constructor() {
     logger.debug("Initializing EntityManager");
-    logger.info("Reminder use await init() function");
   }
 
   async init() {

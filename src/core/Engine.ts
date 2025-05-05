@@ -4,18 +4,29 @@ import {
   type Config,
 } from "@modules/ConfigModule";
 import { GameModule, ModuleState, ModuleRegistry } from "./types";
-import * as fs from "fs";
+import * as fs from "fs/promises";
 import * as path from "path";
 import { logger } from "@utils/logger";
 import { EventManager } from "./EventManager";
 
+// Custom Error Classes
+export class ModuleRegistrationError extends Error {}
+export class CircularDependencyError extends Error {}
+export class ModuleNotFoundError extends Error {}
+export class ModuleNotInitializedError extends Error {}
+
+const MODULE_EVENTS = {
+  INITIALIZED: "module:initialized",
+  DISPOSED: "module:disposed",
+};
+
 export class Engine {
-  private configManager: ConfigManager;
-  public eventManager = new EventManager();
-  private modules: Map<string, GameModule> = new Map();
-  private dependencyGraph: Map<string, string[]> = new Map();
+  private readonly configManager: ConfigManager;
+  public readonly eventManager = new EventManager();
+  private readonly modules: Map<string, GameModule> = new Map();
+  private readonly dependencyGraph: Map<string, string[]> = new Map();
+  public readonly logger = logger;
   private initialized = false;
-  public logger = logger;
 
   public get config(): Readonly<Config> {
     return this.configManager.config;
@@ -23,12 +34,7 @@ export class Engine {
 
   constructor(userConfig?: Partial<Config>) {
     logger.debug("Initializing engine with config:", userConfig);
-
-    // Initialize ConfigManager with defaults and user config
-    this.configManager = new ConfigManager(DefaultConfig);
-    if (userConfig) {
-      this.configManager.update(userConfig);
-    }
+    this.configManager = new ConfigManager({ ...DefaultConfig, ...userConfig });
 
     // Validate configuration
     if (!this.configManager.validate()) {
@@ -39,187 +45,188 @@ export class Engine {
     logger.setEngine(this);
   }
 
-  // Add configuration access methods
-  public getConfigValue<K extends keyof Config>(path: K): Config[K] {
-    return this.configManager.get(path);
+  public getConfigValue<K extends keyof Config>(key: K): Config[K] {
+    return this.configManager.get(key);
   }
 
-  public updateConfig(partialConfig: Partial<Config>) {
+  public updateConfig(partialConfig: Partial<Config>): void {
+    if (this.initialized) {
+      logger.warn("Configuration update after initialization");
+    }
     this.configManager.update(partialConfig);
     logger.debug("Configuration updated", this.config);
   }
 
-  private async autoRegisterModules() {
+  private async discoverAndRegisterModules(): Promise<void> {
     const modulesPath = path.resolve(__dirname, "../modules");
-    logger.debug(`Scanning for modules in: ${modulesPath}`);
+    logger.debug(`Discovering modules in: ${modulesPath}`);
 
-    const loadModules = async (dir: string) => {
-      const entries = fs.readdirSync(dir, { withFileTypes: true });
-      logger.debug(`Found ${entries.length} entries in modules directory`);
+    try {
+      const entries = await fs.readdir(modulesPath, { withFileTypes: true });
+      await Promise.all(
+        entries
+          .filter(
+            (dirent) => dirent.isDirectory() && !dirent.name.startsWith("_")
+          )
+          .map(async (dirent) => {
+            try {
+              const modulePath = path.join(modulesPath, dirent.name, "index");
+              const { default: ModuleClass } = await import(modulePath);
 
-      for (const dirent of entries.filter(
-        (d) => d.isDirectory() && !d.name.startsWith("_")
-      )) {
-        try {
-          const modulePath = path.join(dir, dirent.name, "index");
-          logger.debug(`Attempting to load module from: ${modulePath}`);
+              if (typeof ModuleClass !== "function") {
+                logger.warn(`Invalid module format in ${dirent.name}`);
+                return;
+              }
 
-          const { default: ModuleClass } = await import(`${modulePath}`);
-          logger.debug(`Loaded module class for: ${dirent.name}`);
-
-          if (typeof ModuleClass !== "function") {
-            logger.warn(`Invalid module format in ${dirent.name}`);
-            continue;
-          }
-
-          const moduleInstance = new ModuleClass();
-          this.registerModule(moduleInstance);
-          logger.info(`Successfully registered module: ${dirent.name}`);
-        } catch (error) {
-          if (error instanceof Error) {
-            if (error.message.includes("Cannot find module")) {
-              logger.warn(`Skipping ${dirent.name} - no module found`);
-            } else {
-              logger.error(
-                `Module load error in ${dirent.name}: ${error.message}`,
-                error
-              );
+              const moduleInstance = new ModuleClass();
+              this.registerModule(moduleInstance);
+              logger.info(`Registered module: ${dirent.name}`);
+            } catch (error) {
+              this.handleModuleLoadingError(error, dirent.name);
             }
-          }
-        }
-      }
-    };
-
-    await loadModules(modulesPath);
+          })
+      );
+    } catch (error) {
+      logger.error(
+        "Module discovery failed:",
+        error instanceof Error ? error : new Error(String(error))
+      );
+    }
   }
 
-  private initializeModules() {
+  private handleModuleLoadingError(error: unknown, moduleName: string): void {
+    if (
+      error instanceof Error &&
+      error.message.includes("Cannot find module")
+    ) {
+      logger.warn(`Skipping ${moduleName} - missing module file`);
+    } else {
+      logger.error(
+        `Failed to load module ${moduleName}:`,
+        error instanceof Error ? error : new Error(String(error))
+      );
+    }
+  }
+
+  private initializeEventHandlers(): void {
+    this.eventManager.on(MODULE_EVENTS.INITIALIZED, (module) => {
+      logger.info(`Module initialized: ${module.data.name}`);
+    });
+
+    this.eventManager.on(MODULE_EVENTS.DISPOSED, (module) => {
+      logger.info(`Module disposed: ${module.data.name}`);
+    });
+  }
+
+  private async initializeModuleLifecycle(): Promise<void> {
     const sortedModules = this.topologicalSort();
     logger.debug("Module initialization order:", sortedModules);
 
     for (const moduleName of sortedModules) {
       const module = this.modules.get(moduleName);
-      if (!module || !module.enabled) {
-        logger.warn(`Skipping ${moduleName} (not enabled or not found)`);
+      if (!module?.enabled) {
+        logger.debug(`Skipping disabled module: ${moduleName}`);
         continue;
       }
 
       try {
         logger.debug(`Initializing module: ${moduleName}`);
-        module.init(this);
+        await module.init(this);
         module.state = ModuleState.INITIALIZED;
-        logger.info(`Module initialized: ${moduleName}`);
-        this.eventManager.emit("module:initialized", module.name);
+        this.eventManager.emit(MODULE_EVENTS.INITIALIZED, {
+          name: module.name,
+        });
       } catch (error) {
-        if (error instanceof Error) {
-          logger.error(`Module init failed: ${module.name}`, error);
-        } else {
-          logger.error(
-            `Module init failed: ${module.name}`,
-            new Error(String(error))
-          );
-        }
-        module.enabled = false;
+        this.handleModuleInitializationError(error, module);
       }
     }
   }
 
-  private initializeEvents() {
-    const eventManager = this.eventManager;
+  private handleModuleInitializationError(
+    error: unknown,
+    module?: GameModule
+  ): void {
+    const errorMessage = module
+      ? `Module initialization failed: ${module.name}`
+      : "Unknown module initialization error";
 
-    eventManager.on("module:init", (module) => {
-      if (logger.level == "debug") {
-        logger.info(`[module:init] ${module.data.name} initialized.`, module);
-      } else {
-        logger.info(`[module:init] ${module.data.name} initialized.`);
-      }
-    });
+    logger.error(
+      errorMessage,
+      error instanceof Error ? error : new Error(String(error))
+    );
+
+    if (module) {
+      module.enabled = false;
+      module.state = ModuleState.ERROR;
+    }
   }
 
-  private topologicalSort(): string[] {
-    logger.debug("Performing topological sort on modules");
-    const sorted: string[] = [];
-    const visited = new Set<string>();
-    const temp = new Set<string>();
-
-    const visit = (name: string) => {
-      if (temp.has(name)) {
-        const error = new Error(`Circular dependency: ${name}`);
-        logger.error("Dependency error detected", error);
-        throw error;
-      }
-      if (visited.has(name)) return;
-
-      temp.add(name);
-      logger.debug(`Visiting module: ${name}`);
-      this.dependencyGraph.get(name)?.forEach(visit);
-      temp.delete(name);
-      visited.add(name);
-      sorted.push(name);
-    };
-
-    this.dependencyGraph.forEach((_, name) => visit(name));
-    return sorted.reverse();
-  }
-
-  async initialize() {
+  public async initialize(): Promise<void> {
     if (this.initialized) {
       logger.warn("Engine already initialized");
       return;
     }
 
-    logger.info("Engine initialization started");
-    await this.autoRegisterModules();
-    this.initializeEvents();
-    this.initializeModules();
-    this.initialized = true;
-    logger.info("Engine initialization completed successfully");
+    logger.info("Starting engine initialization");
+    try {
+      await this.discoverAndRegisterModules();
+      this.initializeEventHandlers();
+      await this.initializeModuleLifecycle();
+      this.initialized = true;
+      logger.info("Engine initialized successfully");
+    } catch (error) {
+      logger.error(
+        "Engine initialization failed:",
+        error instanceof Error ? error : new Error(String(error))
+      );
+      await this.shutdown();
+      throw error;
+    }
   }
 
-  async dispose() {
-    logger.info("Disposing engine...");
-    const reverseOrder = Array.from(this.modules.entries()).reverse();
+  public async shutdown(): Promise<void> {
+    logger.info("Starting engine shutdown");
+    const reverseOrder = Array.from(this.modules.values()).reverse();
 
-    for (const [name, module] of reverseOrder) {
-      if (module.state === ModuleState.DISPOSED) {
-        logger.debug(`Module already disposed: ${name}`);
-        continue;
-      }
+    await Promise.allSettled(
+      reverseOrder.map(async (module) => {
+        if (module.state === ModuleState.DISPOSED) return;
 
-      try {
-        logger.info(`Disposing module: ${name}`);
-        if (module.dispose) await module.dispose();
-        module.state = ModuleState.DISPOSED;
-      } catch (error) {
-        logger.error(
-          `Failed to dispose ${name}:`,
-          error instanceof Error ? error : new Error(String(error))
-        );
-      }
-    }
+        try {
+          logger.debug(`Disposing module: ${module.name}`);
+          if (module.dispose) await module.dispose();
+          module.state = ModuleState.DISPOSED;
+          this.eventManager.emit(MODULE_EVENTS.DISPOSED, module);
+        } catch (error) {
+          logger.error(
+            `Failed to dispose ${module.name}:`,
+            error instanceof Error ? error : new Error(String(error))
+          );
+        }
+      })
+    );
 
     this.initialized = false;
-    logger.info("Engine disposal complete");
+    logger.info("Engine shutdown completed");
   }
 
-  registerModule(module: GameModule) {
+  public registerModule(module: GameModule): void {
     if (this.modules.has(module.name)) {
-      const error = new Error(`Module ${module.name} already registered.`);
-      logger.error("Module registration failed", error);
-      throw error;
+      throw new ModuleRegistrationError(
+        `Module ${module.name} already registered`
+      );
     }
 
     if (!module.name || typeof module.init !== "function") {
-      const error = new Error(
+      throw new ModuleRegistrationError(
         `Invalid module structure: ${module.constructor.name}`
       );
-      logger.error("Invalid module detected", error);
-      throw error;
     }
 
     module.state = ModuleState.REGISTERED;
     module.enabled = module.enabled ?? true;
 
+    this.validateModuleDependencies(module);
     this.modules.set(module.name, module);
     this.dependencyGraph.set(module.name, module.dependencies || []);
 
@@ -229,31 +236,56 @@ export class Engine {
     });
   }
 
-  getModule<K extends keyof ModuleRegistry>(name: K): ModuleRegistry[K] {
-    logger.debug(`Retrieving module: ${String(name)}`);
+  private validateModuleDependencies(module: GameModule): void {
+    module.dependencies?.forEach((dep) => {
+      if (!this.modules.has(dep)) {
+        logger.warn(`Missing dependency: ${module.name} requires ${dep}`);
+      }
+    });
+  }
+
+  public getModule<K extends keyof ModuleRegistry>(name: K): ModuleRegistry[K] {
     const module = this.modules.get(name as string);
 
     if (!module) {
       const available = Array.from(this.modules.keys()).join(", ");
-      const error = new Error(
-        `Module "${String(name)}" not found. Available: ${available}`
+      throw new ModuleNotFoundError(
+        `Module "${name}" not found. Available modules: ${available}`
       );
-      logger.error("Module retrieval failed", error);
-      throw error;
     }
 
     if (!module.enabled) {
-      const error = new Error(`Module "${String(name)}" is disabled`);
-      logger.warn("Module disabled warning", error);
-      throw error;
+      throw new ModuleNotInitializedError(`Module "${name}" is disabled`);
     }
 
     if (module.state !== ModuleState.INITIALIZED) {
-      const error = new Error(`Module "${String(name)}" not initialized`);
-      logger.warn("Module not initialized warning", error);
-      throw error;
+      throw new ModuleNotInitializedError(`Module "${name}" not initialized`);
     }
 
     return module as ModuleRegistry[K];
+  }
+
+  private topologicalSort(): string[] {
+    const sorted: string[] = [];
+    const visited = new Set<string>();
+    const stack = new Set<string>();
+
+    const visit = (moduleName: string) => {
+      if (stack.has(moduleName)) {
+        throw new CircularDependencyError(
+          `Circular dependency detected: ${moduleName}`
+        );
+      }
+      if (visited.has(moduleName)) return;
+
+      stack.add(moduleName);
+      this.dependencyGraph.get(moduleName)?.forEach(visit);
+      stack.delete(moduleName);
+      visited.add(moduleName);
+      sorted.push(moduleName);
+    };
+
+    Array.from(this.dependencyGraph.keys()).forEach(visit);
+    return sorted.reverse();
   }
 }
