@@ -1,5 +1,5 @@
-import { Entity } from "./Entity";
-import { TStats } from "./types";
+import { Entity } from ".";
+import { TStats } from "../types";
 import { TAttributes } from "@modules/AttributeModule";
 import { DefaultConfig } from "@modules/ConfigModule";
 import { Inventory } from "@src/modules/InventoryModule";

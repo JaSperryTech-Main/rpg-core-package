@@ -27,7 +27,7 @@ export default class EntityModule implements GameModule {
 }
 
 // === Exports for Module ===
-export * from "./Entity";
-export * from "./Player";
-export * from "./Enemy";
+export * from "./Entities";
+export * from "./Entities/Player";
+export * from "./Entities/Enemy";
 export * from "./EntityManager";

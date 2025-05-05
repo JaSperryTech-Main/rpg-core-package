@@ -1,9 +1,9 @@
-import { IEntity, TStats } from "./types";
+import { IEntity, TStats } from "../types";
 import { TAttributes } from "@modules/AttributeModule";
 
 export abstract class Entity implements IEntity {
   constructor(
-    public readonly id: string,
+    public id: string,
     public name: string,
     public stats: TStats,
     public attributes: TAttributes

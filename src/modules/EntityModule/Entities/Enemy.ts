@@ -1,5 +1,5 @@
-import { Entity } from "./Entity";
-import { TStats } from "./types";
+import { Entity } from ".";
+import { TStats } from "../types";
 import { TAttributes } from "@modules/AttributeModule";
 
 export class Enemy extends Entity {

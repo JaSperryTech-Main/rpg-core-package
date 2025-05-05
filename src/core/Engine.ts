@@ -1,5 +1,3 @@
-// rpg-core/src/core/Engine.ts
-
 import {
   ConfigManager,
   DefaultConfig,
